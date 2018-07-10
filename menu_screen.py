@@ -1,4 +1,3 @@
-import curses
 import math
 import os
 import traceback
@@ -11,26 +10,17 @@ import sqlite3
 import string
 import re
 import completer
+import irc.bot
+import irc.strings
 
-class CursedMenu(object):
+class BotanyBot(irc.bot.SingleServerIRCBot):
     #TODO: name your plant
-    '''A class which abstracts the horrors of building a curses-based menu system'''
-    def __init__(self, this_plant, this_data):
+    '''A hack that makes botany work over IRC.'''
+    def __init__(self, nickname, target, server, port, this_plant, this_data):
         '''Initialization'''
         self.initialized = False
-        self.screen = curses.initscr()
-        curses.noecho()
-        curses.raw()
-        if curses.has_colors():
-            curses.start_color()
-        try:
-            curses.curs_set(0)
-        except curses.error:
-            # Not all terminals support this functionality.
-            # When the error is ignored the screen will look a little uglier, but that's not terrible
-            # So in order to keep botany as accesible as possible to everyone, it should be safe to ignore the error.
-            pass
-        self.screen.keypad(1)
+        self.target = target
+        irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname)
         self.plant = this_plant
         self.visited_plant = None
         self.user_data = this_data
@@ -38,33 +28,10 @@ class CursedMenu(object):
         self.plant_ticks = str(int(self.plant.ticks))
         self.exit = False
         self.infotoggle = 0
-        self.maxy, self.maxx = self.screen.getmaxyx()
-        # Highlighted and Normal line definitions
-        if curses.has_colors():
-            self.define_colors()
-            self.highlighted = curses.color_pair(1)
-        else:
-            self.highlighted = curses.A_REVERSE
-        self.normal = curses.A_NORMAL
-        # Threaded screen update for live changes
-        screen_thread = threading.Thread(target=self.update_plant_live, args=())
-        screen_thread.daemon = True
-        screen_thread.start()
-        # Recusive lock to prevent both threads from drawing at the same time
-        self.screen_lock = threading.RLock()
-        self.screen.clear()
+    def on_welcome(self, c, e):
+        self.c = c
+        self.c.notice(self.target, "botany/irc initialised!")
         self.show(["water","look","garden","visit", "instructions"], title=' botany ', subtitle='options')
-
-    def define_colors(self):
-        # set curses color pairs manually
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
-        curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_BLACK)
-        curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
-        curses.init_pair(4, curses.COLOR_BLUE, curses.COLOR_BLACK)
-        curses.init_pair(5, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
-        curses.init_pair(6, curses.COLOR_YELLOW, curses.COLOR_BLACK)
-        curses.init_pair(7, curses.COLOR_RED, curses.COLOR_BLACK)
-        curses.init_pair(8, curses.COLOR_CYAN, curses.COLOR_BLACK)
 
     def show(self, options, title, subtitle):
         # Draws a menu with parameters
@@ -74,7 +41,7 @@ class CursedMenu(object):
         self.subtitle = subtitle
         self.selected = 0
         self.initialized = True
-        self.draw_menu()
+        self.draw()
 
     def update_options(self):
         # Makes sure you can get a new plant if it dies
@@ -96,43 +63,15 @@ class CursedMenu(object):
         self.options = options
 
     def draw(self):
-        # Draw the menu and lines
-        self.maxy, self.maxx = self.screen.getmaxyx()
-        self.screen_lock.acquire()
-        self.screen.refresh()
-        try:
-            self.draw_default()
-            self.screen.refresh()
-        except Exception as exception:
-            # Makes sure data is saved in event of a crash due to window resizing
-            self.screen.clear()
-            self.screen.addstr(0, 0, "Enlarge terminal!", curses.A_NORMAL)
-            self.screen.refresh()
-            self.__exit__()
-            traceback.print_exc()
-        self.screen_lock.release()
-
-    def draw_menu(self):
-        # Actually draws the menu and handles branching
-        request = ""
-        try:
-            while request is not "exit":
-                self.draw()
-                request = self.get_user_input()
-                self.handle_request(request)
-            self.__exit__()
-
-        # Also calls __exit__, but adds traceback after
-        except Exception as exception:
-            self.screen.clear()
-            self.screen.addstr(0, 0, "Enlarge terminal!", curses.A_NORMAL)
-            self.screen.refresh()
-            self.__exit__()
-            #traceback.print_exc()
-        except IOError as exception:
-            self.screen.clear()
-            self.screen.refresh()
-            self.__exit__()
+        self.c.notice(self.target, "--- %s ---" % self.title);
+        self.c.notice(self.target, "commands: " + self.options.join(", "))
+        self.c.notice(self.target, "plant: " + self.plant_string)
+        self.c.notice(self.target, "score: " + self.plant_ticks)
+        if not self.plant.dead:
+            self.c.notice(self.target, "water " + self.water_gauge())
+        else:
+            self.c.notice(self.target, "(plant dead)")
+        self.draw_plant_ascii(self.plant)
 
     def ascii_render(self, filename, ypos, xpos):
         # Prints ASCII art from file at given coordinates
@@ -141,11 +80,8 @@ class CursedMenu(object):
         this_file = open(this_filename,"r")
         this_string = this_file.readlines()
         this_file.close()
-        self.screen_lock.acquire()
-        for y, line in enumerate(this_string, 2):
-            self.screen.addstr(ypos+y, xpos, line, curses.A_NORMAL)
-        # self.screen.refresh()
-        self.screen_lock.release()
+        for line in this_string:
+            self.c.notice(self.target, line)
 
     def draw_plant_ascii(self, this_plant):
         ypos = 0
@@ -191,6 +127,7 @@ class CursedMenu(object):
             self.ascii_render(this_filename, ypos, xpos)
 
     def draw_default(self):
+
         # draws default menu
         clear_bar = " " * (int(self.maxx*2/3))
         self.screen_lock.acquire()
@@ -419,8 +356,6 @@ class CursedMenu(object):
                 index = 0
 
             # Clear page before drawing next
-            self.clear_info_pane()
-        self.clear_info_pane()
 
     def get_plant_description(self, this_plant):
         output_text = ""
@@ -556,36 +491,23 @@ class CursedMenu(object):
         return output_text
 
     def draw_plant_description(self, this_plant):
-        # If menu is currently showing something other than the description
-        self.clear_info_pane()
-        if self.infotoggle != 1:
-            # get plant description before printing
-            output_string = self.get_plant_description(this_plant)
-            growth_multiplier = 1 + (0.2 * (this_plant.generation-1))
-            output_string += "Generation: {}\nGrowth rate: {}".format(self.plant.generation, growth_multiplier)
-            self.draw_info_text(output_string)
-            self.infotoggle = 1
-        else:
-            # otherwise just set toggle
-            self.infotoggle = 0
+        # get plant description before printing
+        output_string = self.get_plant_description(this_plant)
+        growth_multiplier = 1 + (0.2 * (this_plant.generation-1))
+        output_string += "Generation: {}\nGrowth rate: {}".format(self.plant.generation, growth_multiplier)
+        self.draw_info_text(output_string)
 
     def draw_instructions(self):
-        # Draw instructions on screen
-        self.clear_info_pane()
-        if self.infotoggle != 4:
-            instructions_txt = ("welcome to botany. you've been given a seed\n"
-                                "that will grow into a beautiful plant. check\n"
-                                "in and water your plant every 24h to keep it\n"
-                                "growing. 5 days without water = death. your\n"
-                                "plant depends on you & your friends to live!\n"
-                                "more info is available in the readme :)\n"
-                                "                               cheers,\n"
-                                "                               curio\n"
-                                )
-            self.draw_info_text(instructions_txt)
-            self.infotoggle = 4
-        else:
-            self.infotoggle = 0
+        instructions_txt = ("welcome to botany. you've been given a seed\n"
+                            "that will grow into a beautiful plant. check\n"
+                            "in and water your plant every 24h to keep it\n"
+                            "growing. 5 days without water = death. your\n"
+                            "plant depends on you & your friends to live!\n"
+                            "more info is available in the readme :)\n"
+                            "                               cheers,\n"
+                            "                               curio\n"
+                            )
+        self.draw_info_text(instructions_txt)
 
     def clear_info_pane(self):
         # Clears bottom part of screen
@@ -599,42 +521,22 @@ class CursedMenu(object):
         self.screen_lock.release()
 
     def draw_info_text(self, info_text, y_offset = 0):
-        # print lines of text to info pane at bottom of screen
-        self.screen_lock.acquire()
-        if type(info_text) is str:
-            info_text = info_text.splitlines()
-        for y, line in enumerate(info_text, 2):
-            this_y = y+12 + y_offset
-            if len(line) > self.maxx - 3:
-                line = line[:self.maxx-3]
-            if this_y < self.maxy:
-                self.screen.addstr(this_y, 2, line, curses.A_NORMAL)
-        self.screen.refresh()
-        self.screen_lock.release()
-
+        for line in info_text:
+            self.c.notice(self.target, info_text)
+        
     def harvest_confirmation(self):
-        self.clear_info_pane()
-        # get plant description before printing
-        max_stage = len(self.plant.stage_list) - 1
         harvest_text = ""
         if not self.plant.dead:
             if self.plant.stage == max_stage:
                 harvest_text += "Congratulations! You raised your plant to its final stage of growth.\n"
                 harvest_text += "Your next plant will grow at a speed of: {}x\n".format(1 + (0.2 * self.plant.generation))
-        harvest_text += "If you harvest your plant you'll start over from a seed.\nContinue? (Y/n)"
+        harvest_text += "If you harvest your plant you'll start over from a seed.\nTo continue, issue the command 'confirm_harvest'!"
         self.draw_info_text(harvest_text)
-        try:
-            user_in = self.screen.getch() # Gets user input
-        except Exception as e:
-            self.__exit__()
-        if user_in == -1: # Input comes from pipe/file and is closed
-            raise IOError
 
-        if user_in in [ord('Y'), ord('y')]:
-            self.plant.start_over()
-        else:
-            pass
-        self.clear_info_pane()
+    def confirm_harvest(self):
+        self.plant.start_over()
+        self.c.notice(self.target, "Harvested.")
+        self.draw()
 
     def build_weekly_visitor_output(self, visitors):
         visitor_block = ""
@@ -799,48 +701,32 @@ class CursedMenu(object):
             return None
         return plant
 
-    def handle_request(self, request):
+    def on_privmsg(self, c, e):
+        request = e.arguments[0]
+        if e.source.nick != self.target:
+            self.c.notice(e.source.nick, "You aren't the owner of this plant.")
+            self.c.notice(e.source.nick, "(only %s can control this bot)" % self.target)
+            return
         # Menu options call functions here
         if request == None: return
         if request == "harvest":
             self.harvest_confirmation()
+        if request == "confirm_harvest":
+            self.confirm_harvest()
         if request == "water":
             self.plant.water()
+            self.c.notice(self.target, "Plant watered!")
+            self.draw()
         if request == "look":
-            try:
-                self.draw_plant_description(self.plant)
-            except Exception as exception:
-                self.screen.refresh()
-                # traceback.print_exc()
+            self.draw_plant_description(self.plant)
+            self.draw()
         if request == "instructions":
-            try:
-                self.draw_instructions()
-            except Exception as exception:
-                self.screen.refresh()
-                # traceback.print_exc()
+            self.draw_instructions()
         if request == "visit":
-            try:
-                self.visit_handler()
-            except Exception as exception:
-                self.screen.refresh()
-                # traceback.print_exc()
+            self.c.notice(self.target, "Not yet implemented.")
         if request == "garden":
-            try:
-                self.draw_garden()
-            except Exception as exception:
-                self.screen.refresh()
-                # traceback.print_exc()
+            self.c.notice(self.target, "Not yet implemented.")
 
     def __exit__(self):
         self.exit = True
-        cleanup()
-
-def cleanup():
-    try:
-        curses.curs_set(2)
-    except curses.error:
-        # cursor not supported; just ignore
-        pass
-    curses.endwin()
-    os.system('clear')
 
