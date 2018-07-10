@@ -64,6 +64,9 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
         self.options = options
 
     def draw(self):
+        self.plant_string = self.plant.parse_plant()
+        self.plant_ticks = str(int(self.plant.ticks))
+        self.update_options()
         self.c.notice(self.target, "--- %s ---" % self.title);
         self.c.notice(self.target, "commands: " + ', '.join(self.options))
         self.c.notice(self.target, "plant: " + self.plant_string)
@@ -726,11 +729,6 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
             self.c.notice(self.target, "Not yet implemented.")
         if request == "garden":
             self.c.notice(self.target, "Not yet implemented.")
-        if request == "save":
-            self.user_data.save_plant(self.plant)
-            self.user_data.data_write_json(self.plant)
-            self.user_data.update_garden_db(self.plant)
-            self.c.notice(self.target, "Data saved.")
         if request == "exit":
             self.user_data.save_plant(self.plant)
             self.user_data.data_write_json(self.plant)
