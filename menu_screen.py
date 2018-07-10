@@ -521,9 +521,8 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
         self.screen_lock.release()
 
     def draw_info_text(self, info_text, y_offset = 0):
-        for line in info_text:
-            for line in line.splitlines():
-                self.c.notice(self.target, info_text)
+        for line in info_text.splitlines():
+            self.c.notice(self.target, line)
         
     def harvest_confirmation(self):
         harvest_text = ""
@@ -728,17 +727,16 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
         if request == "garden":
             self.c.notice(self.target, "Not yet implemented.")
         if request == "save":
-            self.user_data.save_plant(this.plant)
-            self.user_data.data_write_json(this.plant)
-            self.user_data.update_garden_db(this.plant)
+            self.user_data.save_plant(self.plant)
+            self.user_data.data_write_json(self.plant)
+            self.user_data.update_garden_db(self.plant)
             self.c.notice(self.target, "Data saved.")
-        if request == "die":
-            self.user_data.save_plant(this.plant)
-            self.user_data.data_write_json(this.plant)
-            self.user_data.update_garden_db(this.plant)
+        if request == "exit":
+            self.user_data.save_plant(self.plant)
+            self.user_data.data_write_json(self.plant)
+            self.user_data.update_garden_db(self.plant)
             self.c.notice(self.target, "Quitting.")
             raise SystemExit
-
 
     def __exit__(self):
         self.exit = True
