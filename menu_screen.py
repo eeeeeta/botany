@@ -82,7 +82,8 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
         this_string = this_file.readlines()
         this_file.close()
         for line in this_string:
-            self.c.notice(self.target, line)
+            for line in line.splitlines():
+                self.c.notice(self.target, line)
 
     def draw_plant_ascii(self, this_plant):
         plant_art_list = [
