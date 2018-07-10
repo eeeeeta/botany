@@ -29,6 +29,7 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
         self.exit = False
         self.infotoggle = 0
     def on_welcome(self, c, e):
+        print("irc connected")
         self.c = c
         self.c.notice(self.target, "botany/irc initialised!")
         self.show(["water","look","garden","visit", "instructions"], title=' botany ', subtitle='options')
@@ -64,7 +65,7 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
 
     def draw(self):
         self.c.notice(self.target, "--- %s ---" % self.title);
-        self.c.notice(self.target, "commands: " + self.options.join(", "))
+        self.c.notice(self.target, "commands: " + ', '.join(self.options))
         self.c.notice(self.target, "plant: " + self.plant_string)
         self.c.notice(self.target, "score: " + self.plant_ticks)
         if not self.plant.dead:
@@ -73,7 +74,7 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
             self.c.notice(self.target, "(plant dead)")
         self.draw_plant_ascii(self.plant)
 
-    def ascii_render(self, filename, ypos, xpos):
+    def ascii_render(self, filename):
         # Prints ASCII art from file at given coordinates
         this_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)),"art")
         this_filename = os.path.join(this_dir,filename)
@@ -84,8 +85,6 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
             self.c.notice(self.target, line)
 
     def draw_plant_ascii(self, this_plant):
-        ypos = 0
-        xpos = int((self.maxx-37)/2 + 25)
         plant_art_list = [
             'poppy',
             'cactus',
@@ -111,20 +110,20 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
             'pachypodium',
         ]
         if this_plant.dead == True:
-            self.ascii_render('rip.txt', ypos, xpos)
+            self.ascii_render('rip.txt')
         elif this_plant.stage == 0:
-            self.ascii_render('seed.txt', ypos, xpos)
+            self.ascii_render('seed.txt')
         elif this_plant.stage == 1:
-            self.ascii_render('seedling.txt', ypos, xpos)
+            self.ascii_render('seedling.txt')
         elif this_plant.stage == 2:
             this_filename = plant_art_list[this_plant.species]+'1.txt'
-            self.ascii_render(this_filename, ypos, xpos)
+            self.ascii_render(this_filename)
         elif this_plant.stage == 3 or this_plant.stage == 5:
             this_filename = plant_art_list[this_plant.species]+'2.txt'
-            self.ascii_render(this_filename, ypos, xpos)
+            self.ascii_render(this_filename)
         elif this_plant.stage == 4:
             this_filename = plant_art_list[this_plant.species]+'3.txt'
-            self.ascii_render(this_filename, ypos, xpos)
+            self.ascii_render(this_filename)
 
     def draw_default(self):
 
@@ -726,6 +725,18 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
             self.c.notice(self.target, "Not yet implemented.")
         if request == "garden":
             self.c.notice(self.target, "Not yet implemented.")
+        if request == "save":
+            self.user_data.save_plant(this.plant)
+            self.user_data.data_write_json(this.plant)
+            self.user_data.update_garden_db(this.plant)
+            self.c.notice(self.target, "Data saved.")
+        if request == "die":
+            self.user_data.save_plant(this.plant)
+            self.user_data.data_write_json(this.plant)
+            self.user_data.update_garden_db(this.plant)
+            self.c.notice(self.target, "Quitting.")
+            raise SystemExit
+
 
     def __exit__(self):
         self.exit = True

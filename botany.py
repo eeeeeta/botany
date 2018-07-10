@@ -621,6 +621,23 @@ class DataManager(object):
         return new_file_check
 
 if __name__ == '__main__':
+    import sys
+    if len(sys.argv) != 4:
+        print("Usage: botany.py <server[:port]> <owner> <nickname>")
+        sys.exit(1)
+    s = sys.argv[1].split(":", 1)
+    server = s[0]
+    if len(s) == 2:
+        try:
+            port = int(s[1])
+        except ValueError:
+            print("Error: Erroneous port.")
+            sys.exit(1)
+    else:
+        port = 6667
+    channel = sys.argv[2]
+    nickname = sys.argv[3]
+    print("initialising plant data")
     my_data = DataManager()
     # if plant save file exists
     if my_data.check_plant():
@@ -632,7 +649,7 @@ if __name__ == '__main__':
     # my_plant is either a fresh plant or an existing plant at this point
     my_plant.start_life()
     my_data.start_threads(my_plant)
-    botany_menu = BotanyBot("botany", "eeeeeta", "192.168.42.15", 6667, my_plant,my_data)
-    my_data.save_plant(my_plant)
-    my_data.data_write_json(my_plant)
-    my_data.update_garden_db(my_plant)
+    print("initialising irc connection")
+    print("connecting to %s:%d as %s, with owner %s" % (server, port, nickname, channel))
+    bot = BotanyBot(nickname, channel, server, port, my_plant,my_data)
+    bot.start()
