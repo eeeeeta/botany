@@ -522,7 +522,8 @@ class BotanyBot(irc.bot.SingleServerIRCBot):
 
     def draw_info_text(self, info_text, y_offset = 0):
         for line in info_text:
-            self.c.notice(self.target, info_text)
+            for line in line.splitlines():
+                self.c.notice(self.target, info_text)
         
     def harvest_confirmation(self):
         harvest_text = ""
